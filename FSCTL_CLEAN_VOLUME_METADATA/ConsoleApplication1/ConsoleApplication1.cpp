@@ -92,7 +92,6 @@ int checkMFTSize() noexcept {
 
     const BOOL data_res = ::DeviceIoControl(rawHandle, FSCTL_GET_NTFS_VOLUME_DATA, NULL, 0u, &data_buf, sizeof(NTFS_VOLUME_DATA_BUFFER), &bytes_returned, NULL);
     if (data_res == 0) {
-        const DWORD last_err = ::GetLastError();
         dumpLastError(L"FSCTL_GET_NTFS_VOLUME_DATA failed! Error: ");
         return 1;
     }
@@ -159,9 +158,9 @@ int main() {
         OCDPuts(L"DeviceIoControl: FSCTL_CLEAN_VOLUME_METADATA seems to have suceeded.");
         ::wprintf_s(L"DeviceIoControl returned code: %i", deviceIOResult);
         }
-    const int mftResult = checkMFTSize();
-    if (mftResult != 0) {
-        return mftResult;
+    const int mftResult2 = checkMFTSize();
+    if (mftResult2 != 0) {
+        return mftResult2;
     }
     OCDPuts(L"\r\n");
 
