@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <cstdlib>
 #include <iso646.h>
+#include "ConsoleApplication1.h"
 
 void OCDPuts(_In_z_ wchar_t const* _Buffer) noexcept {
     //_putws: https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/puts-putws?view=msvc-170
@@ -51,10 +52,69 @@ void dumpInfo() noexcept {
     OCDPuts(L"Trying to clean metadata/unused MFT entries. Make sure You've added the MiniNt key manually, and that you then remove it when done.");
     OCDPuts(L"See also: https://grzegorztworek.medium.com/cleaning-ntfs-artifacts-with-fsctl-clean-volume-metadata-bd29afef290c");
     OCDPuts(L"And: https://twitter.com/0gtweet/status/1203719373472575488");
+    OCDPuts(L"\r\n");
+    }
+
+void trimTrailingBackslash(_Inout_z_ PWSTR const lpszVolumeName) noexcept {
+    PWSTR const lastSlash = wcsrchr(lpszVolumeName, L'\\');
+    if (lastSlash == nullptr) {
+        std::abort();
+    }
+    *lastSlash = 0;
+    //OCDPuts(lpszVolumeName);
+    }
+
+int checkMFTSize() noexcept {
+    constexpr PCWSTR const rawVolumePath = L"\\\\.\\C:";
+    // CreateFileW function (fileapi.h): https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew
+    // Creates or opens a file or I/O device.
+    // If the function succeeds, the return value is an open handle to the specified file, device, named pipe, or mail slot.
+    // If the function fails, the return value is INVALID_HANDLE_VALUE.To get extended error information, call GetLastError.
+    const HANDLE rawHandle = ::CreateFileW(rawVolumePath, GENERIC_READ, (FILE_SHARE_READ bitor FILE_SHARE_WRITE), nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (rawHandle == INVALID_HANDLE_VALUE) {
+        dumpLastError(L"Failed to open MFT. Details: ");
+        return 1;
+        }
+    //LARGE_INTEGER mftFileSize = {};
+    //// GetFileSizeEx function (fileapi.h): https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfilesizeex
+    //// If the function succeeds, the return value is nonzero.
+    //// If the function fails, the return value is zero.To get extended error information, call GetLastError.
+    //const BOOL mftSizeResult = ::GetFileSizeEx(mftHandle, &mftFileSize);
+    //if (mftSizeResult == 0) {
+    //    dumpLastError(L"Failed to get MFT size! Details: ");
+    //    return 1;
+    //    }
+
+
+    NTFS_VOLUME_DATA_BUFFER data_buf = { 0 };
+
+    DWORD bytes_returned = 0u;
+
+    const BOOL data_res = ::DeviceIoControl(rawHandle, FSCTL_GET_NTFS_VOLUME_DATA, NULL, 0u, &data_buf, sizeof(NTFS_VOLUME_DATA_BUFFER), &bytes_returned, NULL);
+    if (data_res == 0) {
+        const DWORD last_err = ::GetLastError();
+        dumpLastError(L"FSCTL_GET_NTFS_VOLUME_DATA failed! Error: ");
+        return 1;
+    }
+
+
+    const int printResult = wprintf_s(L"MFT size: %llu", data_buf.MftValidDataLength.QuadPart);
+    if (printResult < 0) {
+        OCDPuts(L"Couldn't print MFT size.");
+        std::abort();
+    }
+
+    return 0;
     }
 
 int main() {
     dumpInfo();
+    const int mftResult = checkMFTSize();
+    if (mftResult != 0) {
+        return mftResult;
+        }
+    OCDPuts(L"\r\n");
+
     
     constexpr PCWSTR const volumeMountPoint = L"C:\\";
     constexpr const rsize_t MAX_GUID_PATH = 50u;
@@ -74,12 +134,7 @@ int main() {
         std::abort();
         }
 
-    PWSTR lastSlash = wcsrchr(lpszVolumeName, L'\\');
-    if (lastSlash == nullptr) {
-        std::abort();
-    }
-    *lastSlash = 0;
-    OCDPuts(lpszVolumeName);
+    trimTrailingBackslash(lpszVolumeName);
 
     // Note to self, opening handle to volume should be similar to my work in altWinDirStat:
     // https://github.com/ariccio/altWinDirStat/blob/41dd067ce29d15113625759836b20911479008cb/WinDirStat/windirstat/directory_enumeration.cpp#L479
@@ -104,4 +159,10 @@ int main() {
         OCDPuts(L"DeviceIoControl: FSCTL_CLEAN_VOLUME_METADATA seems to have suceeded.");
         ::wprintf_s(L"DeviceIoControl returned code: %i", deviceIOResult);
         }
+    const int mftResult = checkMFTSize();
+    if (mftResult != 0) {
+        return mftResult;
+    }
+    OCDPuts(L"\r\n");
+
     }
